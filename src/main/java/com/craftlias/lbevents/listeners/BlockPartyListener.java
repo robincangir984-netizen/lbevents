@@ -49,18 +49,25 @@ public class BlockPartyListener implements Listener {
 
         String worldName = locConfig.getString(path + ".world", "world");
         World bpWorld = Bukkit.getWorld(worldName);
+        if (bpWorld == null) {
+            for (World w : Bukkit.getWorlds()) {
+                if (w.getName().equalsIgnoreCase(worldName)) {
+                    bpWorld = w;
+                    break;
+                }
+            }
+        }
         if (bpWorld == null) bpWorld = Bukkit.getWorlds().get(0);
         final World finalWorld = bpWorld;
 
         saveArenaFloor(locConfig, path, finalWorld);
 
         if (originalFloorBlocks.isEmpty()) {
-            Bukkit.broadcast(Component.text("§c[HATA] BlockParty zemini bulunamadı! /lbevents wand ile seçip /lbevents setarea blockparty yapmalısın."));
+            Bukkit.broadcast(Component.text("§c[HATA] BlockParty zemini bulunamadı! Seçilen alan boş veya yanlış yükseklikte."));
             isGameActive = false;
             return;
         }
 
-        // Oyundaki aktif oyuncuları kaydet
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (p.getWorld().equals(finalWorld)) {
                 activePlayers.add(p.getUniqueId());
@@ -73,7 +80,6 @@ public class BlockPartyListener implements Listener {
             return;
         }
 
-        // Config'den izin verilen blokları çek
         FileConfiguration config = LbEvents.getInstance().getConfig();
         List<String> configBlocks = config.getStringList("blockparty.enabled-blocks");
         List<Material> availableColors = new ArrayList<>();
@@ -86,7 +92,7 @@ public class BlockPartyListener implements Listener {
         }
 
         if (availableColors.isEmpty()) {
-            availableColors.add(Material.WHITE_TERRACOTTA);
+            availableColors.addAll(new HashSet<>(originalFloorBlocks.values()));
         }
 
         Random random = new Random();
@@ -101,7 +107,6 @@ public class BlockPartyListener implements Listener {
                     return;
                 }
 
-                // 1 kişi veya hiç kimse kalmadıysa oyunu bitir
                 if (activePlayers.size() <= 1) {
                     endGame();
                     cancel();
@@ -209,15 +214,14 @@ public class BlockPartyListener implements Listener {
         if (!activePlayers.contains(player.getUniqueId())) return;
         
         activePlayers.remove(player.getUniqueId());
-        rankingList.add(0, player.getUniqueId()); // Son ölenler listeye başa eklenir (1. sonradan belirlenecek)
+        rankingList.add(0, player.getUniqueId());
 
         player.sendMessage(Component.text("§c[BlockParty] Sürede doğru renge ulaşamadın ve elendin!"));
         player.teleport(player.getWorld().getSpawnLocation());
 
-        // Eğer oyunda 1 kişi kaldıysa kazananı ilan et
         if (activePlayers.size() == 1) {
             UUID winnerUUID = activePlayers.iterator().next();
-            rankingList.add(0, winnerUUID); // Kazanan 1. sırada listeye eklenir
+            rankingList.add(0, winnerUUID);
             endGame();
         }
     }
@@ -232,7 +236,6 @@ public class BlockPartyListener implements Listener {
 
         FileConfiguration config = LbEvents.getInstance().getConfig();
 
-        // İlk 3 kişiye ödül dağıtımı
         for (int i = 0; i < Math.min(rankingList.size(), 3); i++) {
             UUID uuid = rankingList.get(i);
             Player player = Bukkit.getPlayer(uuid);
@@ -278,7 +281,7 @@ public class BlockPartyListener implements Listener {
         FileConfiguration locConfig = LbEvents.getInstance().getLocationManager().getConfig();
         String worldName = locConfig.getString("events.blockparty.world", "world");
         
-        if (!player.getWorld().getName().equals(worldName)) return;
+        if (!player.getWorld().getName().equalsIgnoreCase(worldName)) return;
         if (!activePlayers.contains(player.getUniqueId())) return;
 
         if (isEliminationPhase) {
