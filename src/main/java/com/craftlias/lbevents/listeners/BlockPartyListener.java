@@ -51,7 +51,6 @@ public class BlockPartyListener implements Listener {
                 }
 
                 if (countdown <= 0) {
-                    // 1. Yeni güvenli renk seç
                     currentSafeColorKey = colorList.get(random.nextInt(colorList.size()));
                     try {
                         currentSafeColor = Material.valueOf(currentSafeColorKey);
@@ -62,10 +61,9 @@ public class BlockPartyListener implements Listener {
                     String colorDisplayName = config.getString("colors." + currentSafeColorKey, "&f&lRENK");
                     String translatedColor = ChatColor.translateAlternateColorCodes('&', colorDisplayName);
 
-                    // 2. Zemin taramasını yap ve yanlış renkleri kır (HAVAYA çevir)
+                    // Zemini güncelle (Hatalı Y koordinatlarını es geçip sütun bazlı tarama yapar)
                     updateArenaFloor(config, currentSafeColor);
 
-                    // 3. Oyunculara bildir
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         if (bpWorld != null && player.getWorld().equals(bpWorld)) {
                             player.sendTitle(translatedColor, ChatColor.GRAY + "Bu renge bas!", 0, 40, 10);
@@ -73,9 +71,8 @@ public class BlockPartyListener implements Listener {
                         }
                     }
 
-                    countdown = 5; // Süreyi sıfırla
+                    countdown = 5;
                 } else {
-                    // Sayaç akarken ekranda göster
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         if (bpWorld != null && player.getWorld().equals(bpWorld)) {
                             player.sendActionBar(Component.text("§bSıradaki Renk Değişimine: §e" + countdown + " §bsaniye"));
@@ -95,24 +92,21 @@ public class BlockPartyListener implements Listener {
         if (world == null) return;
 
         double x1 = config.getDouble("locations.pos1.x");
-        double y1 = config.getDouble("locations.pos1.y");
         double z1 = config.getDouble("locations.pos1.z");
 
         double x2 = config.getDouble("locations.pos2.x");
-        double y2 = config.getDouble("locations.pos2.y");
         double z2 = config.getDouble("locations.pos2.z");
 
         int minX = (int) Math.min(x1, x2);
         int maxX = (int) Math.max(x1, x2);
-        int minY = (int) Math.min(y1, y2);
-        int maxY = (int) Math.max(y1, y2);
         int minZ = (int) Math.min(z1, z2);
         int maxZ = (int) Math.max(z1, z2);
 
-        // Zemin yüksekliği tek kat veya birkaç kat olabilir, sınırları tam tarıyoruz
+        // Y koordinatları config'de 0 olsa bile, zeminin bulunduğu makul yükseklik aralığını (-60 ile 120 arası) tarar
         for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                // Sütun boyunca yukarıdan aşağıya tarama yapıp terracotta/yün buluyoruz
+                for (int y = -60; y <= 120; y++) {
                     Block block = world.getBlockAt(x, y, z);
                     String blockName = block.getType().name();
                     if (blockName.endsWith("_TERRACOTTA") || blockName.endsWith("_WOOL")) {
@@ -153,7 +147,6 @@ public class BlockPartyListener implements Listener {
         Block block = loc.getBlock();
         String blockName = block.getType().name();
 
-        // Eğer oyuncu boşluğa düştüyse VEYA güvenli renk dışındaki bir bloğa bastıysa elenir
         boolean isStandingOnInvalidBlock = block.getType() == Material.AIR || 
                 ((blockName.endsWith("_TERRACOTTA") || blockName.endsWith("_WOOL")) && block.getType() != currentSafeColor);
 
