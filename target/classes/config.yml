@@ -1,0 +1,9 @@
+settings:
+  discord-webhook:
+    enabled: false
+    url: "DISCORD_WEBHOOK_URL_BURAYA"
+
+messages:
+  prefix: "&#FFD700&lLbEvents &8▸ "
+  no-permission: "&#ff5555Bu komutu kullanmak için yetkiniz yok."
+  reload: "&#aaffaaKonfigürasyon başarıyla yenilendi."
