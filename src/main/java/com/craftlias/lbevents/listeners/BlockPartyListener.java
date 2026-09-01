@@ -42,17 +42,22 @@ public class BlockPartyListener implements Listener {
                 }
 
                 if (countdown <= 0) {
-                    // Rastgele güvenli renk seç
+                    // 1. Önceki turdan kalan kırılmış/havaya uçmuş blokları eski haline getirmek yerine 
+                    // yeni renk seçip diğerlerini yok edeceğiz. 
+                    // (Not: Gerçek bir BlockParty'de zemin ya tamamen yenilenir ya da yanlışlar yok olur)
+                    
                     currentSafeColor = WOOL_COLORS.get(new Random().nextInt(WOOL_COLORS.size()));
                     String colorName = formatColorName(currentSafeColor);
 
-                    // Herkese Title ve Chat bildirimi gönder
                     for (Player player : Bukkit.getOnlinePlayers()) {
-                        player.sendTitle(ChatColor.YELLOW + "RENK: " + colorName, ChatColor.GRAY + "O bloğa hızlıca çık!", 0, 40, 10);
+                        player.sendTitle(ChatColor.YELLOW + "RENK: " + colorName, ChatColor.GRAY + "O bloğa hızlıca çık!", 0, 30, 10);
                         player.sendMessage(Component.text("§e[BlockParty] §fGüvenli Renk: " + colorName));
+                        
+                        // Oyuncunun etrafındaki (örneğin 15 blok yarıçapındaki alt zemindeki) yünleri tara ve sil
+                        removeWrongBlocks(player.getLocation());
                     }
 
-                    countdown = 5; // Sonraki tur için süreyi sıfırla
+                    countdown = 5;
                 } else {
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         player.sendActionBar(Component.text("§bSıradaki Renk Değişimine: §e" + countdown + " §bsaniye"));
@@ -60,7 +65,33 @@ public class BlockPartyListener implements Listener {
                     countdown--;
                 }
             }
-        }.runTaskTimer(LbEvents.getInstance(), 0L, 20L); // Her 1 saniyede bir çalışır
+        }.runTaskTimer(LbEvents.getInstance(), 0L, 20L);
+    }
+
+    // Oyuncunun altındaki zemini tarayıp güvenli renk olmayan yünleri yok eden fonksiyon
+    private static void removeWrongBlocks(Location center) {
+        int radius = 12; // Zemin tarama yarıçapı
+        org.bukkit.World world = center.getWorld();
+        if (world == null) return;
+
+        int cx = center.getBlockX();
+        int cy = center.getBlockY();
+        int cz = center.getBlockZ();
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                // Oyuncunun 1-2 blok altındaki alanı tarıyoruz
+                for (int y = -3; y <= 1; y++) {
+                    Block block = world.getBlockAt(cx + x, cy + y, cz + z);
+                    if (block.getType().name().endsWith("_WOOL")) {
+                        if (block.getType() != currentSafeColor) {
+                            // Yanlış renkli yünleri havaya (boşluğa) çevirip düşmelerini sağlıyoruz
+                            block.setType(Material.AIR);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public static void stopBlockParty() {
@@ -85,10 +116,9 @@ public class BlockPartyListener implements Listener {
         Location loc = player.getLocation().subtract(0, 1, 0);
         Block block = loc.getBlock();
 
-        // Eğer oyuncu yün bir bloğun üzerindeyse ve güvenli renk değilse elenir
-        if (block.getType().name().endsWith("_WOOL") && block.getType() != currentSafeColor) {
+        if (block.getType() == Material.AIR || (block.getType().name().endsWith("_WOOL") && block.getType() != currentSafeColor)) {
             eliminatedPlayers.add(player.getUniqueId());
-            player.sendMessage(Component.text("§c[BlockParty] Yanlış renkte kaldın ve elendin!"));
+            player.sendMessage(Component.text("§c[BlockParty] Yanlış renkte kaldın veya boşluğa düştün, elendin!"));
             player.teleport(player.getWorld().getSpawnLocation());
         }
     }
