@@ -1,8 +1,0 @@
-com\craftlias\lbevents\listeners\BlockPartyListener.class
-com\craftlias\lbevents\managers\EventManager.class
-com\craftlias\lbevents\commands\EventCommand.class
-com\craftlias\lbevents\utils\ColorUtil.class
-com\craftlias\lbevents\listeners\SabotageListener.class
-com\craftlias\lbevents\LbEvents.class
-com\craftlias\lbevents\managers\WebhookManager.class
-com\craftlias\lbevents\listeners\MiningListener.class
