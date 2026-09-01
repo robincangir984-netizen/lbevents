@@ -23,9 +23,11 @@ public class BlockPartyListener implements Listener {
     private static BukkitTask gameTask = null;
     private static Material currentSafeColor = Material.WHITE_TERRACOTTA;
     private static String currentSafeColorKey = "WHITE_TERRACOTTA";
+    private static boolean isGameActive = false;
 
     public static void startBlockParty() {
         reset();
+        isGameActive = true;
         FileConfiguration config = LbEvents.getInstance().getConfig();
         
         Set<String> colorKeys = config.getConfigurationSection("colors") != null ? 
@@ -43,12 +45,13 @@ public class BlockPartyListener implements Listener {
 
             @Override
             public void run() {
-                if (!"blockparty".equalsIgnoreCase(LbEvents.getInstance().getEventManager().getActiveEvent())) {
+                if (!"blockparty".equalsIgnoreCase(LbEvents.getInstance().getEventManager().getActiveEvent()) || !isGameActive) {
                     cancel();
                     return;
                 }
 
                 if (countdown <= 0) {
+                    // 1. Yeni güvenli renk seç
                     currentSafeColorKey = colorList.get(random.nextInt(colorList.size()));
                     try {
                         currentSafeColor = Material.valueOf(currentSafeColorKey);
@@ -59,10 +62,10 @@ public class BlockPartyListener implements Listener {
                     String colorDisplayName = config.getString("colors." + currentSafeColorKey, "&f&lRENK");
                     String translatedColor = ChatColor.translateAlternateColorCodes('&', colorDisplayName);
 
-                    // Zemini güncelle
+                    // 2. Zemin taramasını yap ve yanlış renkleri kır (HAVAYA çevir)
                     updateArenaFloor(config, currentSafeColor);
 
-                    // Sadece BlockParty dünyasındaki oyunculara bildir
+                    // 3. Oyunculara bildir
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         if (bpWorld != null && player.getWorld().equals(bpWorld)) {
                             player.sendTitle(translatedColor, ChatColor.GRAY + "Bu renge bas!", 0, 40, 10);
@@ -70,11 +73,12 @@ public class BlockPartyListener implements Listener {
                         }
                     }
 
-                    countdown = 5;
+                    countdown = 5; // Süreyi sıfırla
                 } else {
+                    // Sayaç akarken ekranda göster
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         if (bpWorld != null && player.getWorld().equals(bpWorld)) {
-                            player.sendActionBar(Component.text("§bSıradaki Renk: §e" + countdown + " §bsaniye"));
+                            player.sendActionBar(Component.text("§bSıradaki Renk Değişimine: §e" + countdown + " §bsaniye"));
                         }
                     }
                     countdown--;
@@ -105,12 +109,13 @@ public class BlockPartyListener implements Listener {
         int minZ = (int) Math.min(z1, z2);
         int maxZ = (int) Math.max(z1, z2);
 
+        // Zemin yüksekliği tek kat veya birkaç kat olabilir, sınırları tam tarıyoruz
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
                     Block block = world.getBlockAt(x, y, z);
                     String blockName = block.getType().name();
-                    if (blockName.endsWith("_TERRACOTTA")) {
+                    if (blockName.endsWith("_TERRACOTTA") || blockName.endsWith("_WOOL")) {
                         if (block.getType() != safeMat) {
                             block.setType(Material.AIR);
                         }
@@ -121,6 +126,7 @@ public class BlockPartyListener implements Listener {
     }
 
     public static void stopBlockParty() {
+        isGameActive = false;
         if (gameTask != null) {
             gameTask.cancel();
             gameTask = null;
@@ -134,27 +140,26 @@ public class BlockPartyListener implements Listener {
 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
-        if (!"blockparty".equalsIgnoreCase(LbEvents.getInstance().getEventManager().getActiveEvent())) return;
+        if (!"blockparty".equalsIgnoreCase(LbEvents.getInstance().getEventManager().getActiveEvent()) || !isGameActive) return;
         
         Player player = event.getPlayer();
         FileConfiguration config = LbEvents.getInstance().getConfig();
         String worldName = config.getString("locations.pos1.world", "BlockParty");
         
-        // Sadece BlockParty dünyasındaki oyuncuları kontrol et
         if (!player.getWorld().getName().equals(worldName)) return;
         if (eliminatedPlayers.contains(player.getUniqueId())) return;
 
-        // Oyuncu arena sınırları içinde mi kontrol et (isteğe bağlı ama güvenli olur)
         Location loc = player.getLocation().subtract(0, 1, 0);
         Block block = loc.getBlock();
         String blockName = block.getType().name();
 
+        // Eğer oyuncu boşluğa düştüyse VEYA güvenli renk dışındaki bir bloğa bastıysa elenir
         boolean isStandingOnInvalidBlock = block.getType() == Material.AIR || 
-                (blockName.endsWith("_TERRACOTTA") && block.getType() != currentSafeColor);
+                ((blockName.endsWith("_TERRACOTTA") || blockName.endsWith("_WOOL")) && block.getType() != currentSafeColor);
 
         if (isStandingOnInvalidBlock) {
             eliminatedPlayers.add(player.getUniqueId());
-            player.sendMessage(Component.text("§c[BlockParty] Yanlış renkte kaldın ve elendin!"));
+            player.sendMessage(Component.text("§c[BlockParty] Yanlış renkte kaldın veya düştün, elendin!"));
             player.teleport(player.getWorld().getSpawnLocation());
         }
     }
