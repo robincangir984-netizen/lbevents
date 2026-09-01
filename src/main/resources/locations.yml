@@ -1,0 +1,14 @@
+# LbEvents Etkinlik Alanları Konfigürasyonu
+# /lbevent wand ve /lbevent setarea [etkinlik] komutları ile otomatik güncellenir.
+
+events:
+  blockparty:
+    world: world
+    pos1:
+      x: 0
+      y: 64
+      z: 0
+    pos2:
+      x: 0
+      y: 64
+      z: 0

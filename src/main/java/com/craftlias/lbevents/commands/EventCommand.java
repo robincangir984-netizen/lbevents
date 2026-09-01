@@ -1,14 +1,19 @@
 package com.craftlias.lbevents.commands;
 
 import com.craftlias.lbevents.LbEvents;
+import com.craftlias.lbevents.listeners.WandListener;
 import com.craftlias.lbevents.managers.EventManager;
 import com.craftlias.lbevents.managers.WebhookManager;
 import com.craftlias.lbevents.utils.ColorUtil;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -21,7 +26,7 @@ public class EventCommand implements CommandExecutor, TabCompleter {
         EventManager em = LbEvents.getInstance().getEventManager();
 
         if (args.length == 0) {
-            sender.sendMessage(ColorUtil.colorize(LbEvents.getInstance().getConfig().getString("messages.prefix", "&eLbEvents ▸ ") + "&fKullanım: /lbevents <start|stop|reload|help|setarea>"));
+            sender.sendMessage(ColorUtil.colorize(LbEvents.getInstance().getConfig().getString("messages.prefix", "&eLbEvents ▸ ") + "&fKullanım: /lbevents <start|stop|reload|help|wand|setarea>"));
             return true;
         }
 
@@ -35,6 +40,26 @@ public class EventCommand implements CommandExecutor, TabCompleter {
                 }
                 LbEvents.getInstance().reloadConfig();
                 sender.sendMessage(ColorUtil.colorize(LbEvents.getInstance().getConfig().getString("messages.reload", "&aKonfigürasyon yenilendi!")));
+                break;
+
+            case "wand":
+                if (!(sender instanceof Player)) {
+                    sender.sendMessage("Bu komut sadece oyuncular tarafından kullanılabilir.");
+                    return true;
+                }
+                if (!sender.hasPermission("lbevents.admin")) {
+                    sender.sendMessage(ColorUtil.colorize("&cYetkiniz yok."));
+                    return true;
+                }
+                Player wandPlayer = (Player) sender;
+                ItemStack wand = new ItemStack(Material.WOODEN_AXE);
+                ItemMeta meta = wand.getItemMeta();
+                if (meta != null) {
+                    meta.setDisplayName("§e§lLbEvents Wand");
+                    wand.setItemMeta(meta);
+                }
+                wandPlayer.getInventory().addItem(wand);
+                wandPlayer.sendMessage(ColorUtil.colorize("&a[LbEvents] Seçim baltası verildi! Sol tık: Pos1 | Sağ tık: Pos2"));
                 break;
 
             case "start":
@@ -79,10 +104,26 @@ public class EventCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 if (args.length < 2) {
-                    sender.sendMessage(ColorUtil.colorize("&cKullanım: /lbevents setarea <blockparty|sabotage>"));
+                    sender.sendMessage(ColorUtil.colorize("&cKullanım: /lbevents setarea <blockparty|mining|sabotage>"));
                     return true;
                 }
-                sender.sendMessage(ColorUtil.colorize("&a" + args[1].toUpperCase() + " için bölge koordinatları kaydedildi!"));
+                Player player = (Player) sender;
+                String eventName = args[1].toLowerCase();
+
+                Location p1 = WandListener.pos1Map.get(player.getUniqueId());
+                Location p2 = WandListener.pos2Map.get(player.getUniqueId());
+
+                if (p1 == null || p2 == null) {
+                    player.sendMessage(ColorUtil.colorize("&c[HATA] Önce /lbevents wand ile balta alıp 2 nokta seçmelisin!"));
+                    return true;
+                }
+
+                if (LbEvents.getInstance().getLocationManager() != null) {
+                    LbEvents.getInstance().getLocationManager().saveArea(eventName, p1, p2);
+                    player.sendMessage(ColorUtil.colorize("&a[LbEvents] " + eventName.toUpperCase() + " alanı locations.yml dosyasına başarıyla kaydedildi!"));
+                } else {
+                    player.sendMessage(ColorUtil.colorize("&c[HATA] LocationManager yüklenemedi!"));
+                }
                 break;
 
             default:
@@ -100,6 +141,7 @@ public class EventCommand implements CommandExecutor, TabCompleter {
             completions.add("stop");
             completions.add("reload");
             completions.add("help");
+            completions.add("wand");
             completions.add("setarea");
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("start") || args[0].equalsIgnoreCase("setarea"))) {
             completions.add("blockparty");
