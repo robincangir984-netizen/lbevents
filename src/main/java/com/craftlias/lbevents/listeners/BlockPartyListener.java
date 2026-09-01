@@ -33,12 +33,21 @@ public class BlockPartyListener implements Listener {
         Set<String> colorKeys = config.getConfigurationSection("colors") != null ? 
                 config.getConfigurationSection("colors").getKeys(false) : Collections.emptySet();
         
-        if (colorKeys.isEmpty()) return;
+        if (colorKeys.isEmpty()) {
+            // Yedek renk havuzu (config boşsa çökmesin)
+            colorKeys = Set.of("WHITE_TERRACOTTA", "RED_TERRACOTTA", "GREEN_TERRACOTTA", "BLUE_TERRACOTTA", "YELLOW_TERRACOTTA");
+        }
+        
         List<String> colorList = new ArrayList<>(colorKeys);
         Random random = new Random();
 
-        String worldName = config.getString("locations.pos1.world", "BlockParty");
+        String worldName = config.getString("locations.pos1.world", config.getString("events.blockparty.world", "BlockParty"));
         World bpWorld = Bukkit.getWorld(worldName);
+        if (bpWorld == null) {
+            bpWorld = Bukkit.getWorlds().get(0); // Dünya bulunamazsa ana dünya
+        }
+
+        final World finalWorld = bpWorld;
 
         gameTask = new BukkitRunnable() {
             int countdown = 5;
@@ -58,14 +67,15 @@ public class BlockPartyListener implements Listener {
                         currentSafeColor = Material.WHITE_TERRACOTTA;
                     }
 
-                    String colorDisplayName = config.getString("colors." + currentSafeColorKey, "&f&lRENK");
+                    String colorDisplayName = config.getString("colors." + currentSafeColorKey, "&f&l" + currentSafeColorKey);
                     String translatedColor = ChatColor.translateAlternateColorCodes('&', colorDisplayName);
 
-                    // Zemini güncelle (Hatalı Y koordinatlarını es geçip sütun bazlı tarama yapar)
-                    updateArenaFloor(config, currentSafeColor);
+                    // 1. Zemin kırma işlemini çalıştır (Config koordinatları veya oyuncu altı akıllı tarama)
+                    updateArenaFloor(config, finalWorld, currentSafeColor);
 
+                    // 2. Oyunculara başlık ve mesaj gönder
                     for (Player player : Bukkit.getOnlinePlayers()) {
-                        if (bpWorld != null && player.getWorld().equals(bpWorld)) {
+                        if (player.getWorld().equals(finalWorld)) {
                             player.sendTitle(translatedColor, ChatColor.GRAY + "Bu renge bas!", 0, 40, 10);
                             player.sendMessage(Component.text("§e[BlockParty] §fGüvenli Renk: " + translatedColor));
                         }
@@ -74,8 +84,8 @@ public class BlockPartyListener implements Listener {
                     countdown = 5;
                 } else {
                     for (Player player : Bukkit.getOnlinePlayers()) {
-                        if (bpWorld != null && player.getWorld().equals(bpWorld)) {
-                            player.sendActionBar(Component.text("§bSıradaki Renk Değişimine: §e" + countdown + " §bsaniye"));
+                        if (player.getWorld().equals(finalWorld)) {
+                            player.sendActionBar(Component.text("§bSıradaki Renk: §e" + countdown + " §bsaniye"));
                         }
                     }
                     countdown--;
@@ -84,37 +94,73 @@ public class BlockPartyListener implements Listener {
         }.runTaskTimer(LbEvents.getInstance(), 0L, 20L);
     }
 
-    private static void updateArenaFloor(FileConfiguration config, Material safeMat) {
-        if (!config.contains("locations.pos1") || !config.contains("locations.pos2")) return;
+    private static void updateArenaFloor(FileConfiguration config, World world, Material safeMat) {
+        boolean usedConfigBounds = false;
 
-        String worldName = config.getString("locations.pos1.world", "BlockParty");
-        World world = Bukkit.getWorld(worldName);
-        if (world == null) return;
+        // Farklı olası config yollarını kontrol et (/lbevent setarea nereye kaydediyorsa yakala)
+        String[] pathPrefixes = {"locations", "events.blockparty", "arenas.blockparty"};
+        
+        for (String prefix : pathPrefixes) {
+            if (config.contains(prefix + ".pos1") && config.contains(prefix + ".pos2")) {
+                double x1 = config.getDouble(prefix + ".pos1.x");
+                double y1 = config.getDouble(prefix + ".pos1.y");
+                double z1 = config.getDouble(prefix + ".pos1.z");
 
-        double x1 = config.getDouble("locations.pos1.x");
-        double z1 = config.getDouble("locations.pos1.z");
+                double x2 = config.getDouble(prefix + ".pos2.x");
+                double y2 = config.getDouble(prefix + ".pos2.y");
+                double z2 = config.getDouble(prefix + ".pos2.z");
 
-        double x2 = config.getDouble("locations.pos2.x");
-        double z2 = config.getDouble("locations.pos2.z");
+                // Eğer Y koordinatları 0.0 veya tanımsız/hatalı girilmişse sütun taramasına geç
+                if (y1 != 0.0 || y2 != 0.0) {
+                    int minX = (int) Math.min(x1, x2);
+                    int maxX = (int) Math.max(x1, x2);
+                    int minY = (int) Math.min(y1, y2);
+                    int maxY = (int) Math.max(y1, y2);
+                    int minZ = (int) Math.min(z1, z2);
+                    int maxZ = (int) Math.max(z1, z2);
 
-        int minX = (int) Math.min(x1, x2);
-        int maxX = (int) Math.max(x1, x2);
-        int minZ = (int) Math.min(z1, z2);
-        int maxZ = (int) Math.max(z1, z2);
+                    for (int x = minX; x <= maxX; x++) {
+                        for (int y = minY; y <= maxY; y++) {
+                            for (int z = minZ; z <= maxZ; z++) {
+                                Block block = world.getBlockAt(x, y, z);
+                                breakBlockIfInvalid(block, safeMat);
+                            }
+                        }
+                    }
+                    usedConfigBounds = true;
+                    break;
+                }
+            }
+        }
 
-        // Y koordinatları config'de 0 olsa bile, zeminin bulunduğu makul yükseklik aralığını (-60 ile 120 arası) tarar
-        for (int x = minX; x <= maxX; x++) {
-            for (int z = minZ; z <= maxZ; z++) {
-                // Sütun boyunca yukarıdan aşağıya tarama yapıp terracotta/yün buluyoruz
-                for (int y = -60; y <= 120; y++) {
-                    Block block = world.getBlockAt(x, y, z);
-                    String blockName = block.getType().name();
-                    if (blockName.endsWith("_TERRACOTTA") || blockName.endsWith("_WOOL")) {
-                        if (block.getType() != safeMat) {
-                            block.setType(Material.AIR);
+        // Eğer config koordinatları yoksa veya Y=0 hatası içeriyorsa, 
+        // dünyadaki tüm aktif oyuncuların altındaki zemini (15 blok yarıçapında) otomatik kırarak asla hata vermesini engelle!
+        if (!usedConfigBounds) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getWorld().equals(world)) {
+                    Location loc = player.getLocation();
+                    int px = loc.getBlockX();
+                    int pz = loc.getBlockZ();
+                    int py = loc.getBlockY();
+
+                    for (int x = -15; x <= 15; x++) {
+                        for (int z = -15; z <= 15; z++) {
+                            for (int y = -3; y <= 2; y++) {
+                                Block block = world.getBlockAt(px + x, py + y, pz + z);
+                                breakBlockIfInvalid(block, safeMat);
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private static void breakBlockIfInvalid(Block block, Material safeMat) {
+        String name = block.getType().name();
+        if (name.endsWith("_TERRACOTTA") || name.endsWith("_WOOL")) {
+            if (block.getType() != safeMat) {
+                block.setType(Material.AIR);
             }
         }
     }
@@ -138,7 +184,7 @@ public class BlockPartyListener implements Listener {
         
         Player player = event.getPlayer();
         FileConfiguration config = LbEvents.getInstance().getConfig();
-        String worldName = config.getString("locations.pos1.world", "BlockParty");
+        String worldName = config.getString("locations.pos1.world", config.getString("events.blockparty.world", "BlockParty"));
         
         if (!player.getWorld().getName().equals(worldName)) return;
         if (eliminatedPlayers.contains(player.getUniqueId())) return;
