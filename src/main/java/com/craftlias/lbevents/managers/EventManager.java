@@ -13,7 +13,7 @@ public class EventManager {
         this.activeEvent = type.toLowerCase();
 
         if (this.activeEvent.equals("blockparty")) {
-            BlockPartyListener.reset();
+            BlockPartyListener.startBlockParty();
         } else if (this.activeEvent.equals("sabotage")) {
             SabotageListener.initializeSabotageGame();
         }
@@ -25,7 +25,9 @@ public class EventManager {
     public boolean stopEvent() {
         if (activeEvent == null) return false;
 
-        if (this.activeEvent.equals("sabotage")) {
+        if (this.activeEvent.equals("blockparty")) {
+            BlockPartyListener.stopBlockParty();
+        } else if (this.activeEvent.equals("sabotage")) {
             SabotageListener.clearSabotage();
         }
 
