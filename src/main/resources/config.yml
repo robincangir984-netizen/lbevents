@@ -1,9 +1,57 @@
-settings:
-  discord-webhook:
-    enabled: false
-    url: "DISCORD_WEBHOOK_URL_BURAYA"
-
 messages:
-  prefix: "&#FFD700&lLbEvents &8▸ "
-  no-permission: "&#ff5555Bu komutu kullanmak için yetkiniz yok."
-  reload: "&#aaffaaKonfigürasyon başarıyla yenilendi."
+  prefix: "&eLbEvents ▸ "
+  no-permission: "&cBu komutu kullanmak için yetkin yok."
+  reload: "&aKonfigürasyon yenilendi!"
+
+# BlockParty Oyun Ayarları ve Blok Listesi
+blockparty:
+  # Oyun sırasında rastgele seçilip zeminde çıkmasını istediğin bloklar (Matlar, Yünler, Betonlar vb.)
+  enabled-blocks:
+    - WHITE_TERRACOTTA
+    - ORANGE_TERRACOTTA
+    - MAGENTA_TERRACOTTA
+    - LIGHT_BLUE_TERRACOTTA
+    - YELLOW_TERRACOTTA
+    - LIME_TERRACOTTA
+    - PINK_TERRACOTTA
+    - GRAY_TERRACOTTA
+    - LIGHT_GRAY_TERRACOTTA
+    - CYAN_TERRACOTTA
+    - PURPLE_TERRACOTTA
+    - BLUE_TERRACOTTA
+    - BROWN_TERRACOTTA
+    - GREEN_TERRACOTTA
+    - RED_TERRACOTTA
+    - BLACK_TERRACOTTA
+
+  # Blokların ekranda / sohbette görünecek Türkçe isimleri ve renkleri
+  colors:
+    WHITE_TERRACOTTA: "&f&lBeyaz"
+    ORANGE_TERRACOTTA: "&6&lTuruncu"
+    MAGENTA_TERRACOTTA: "&d&lMagenta"
+    LIGHT_BLUE_TERRACOTTA: "&b&lAçık Mavi"
+    YELLOW_TERRACOTTA: "&e&lSarı"
+    LIME_TERRACOTTA: "&a&lAçık Yeşil"
+    PINK_TERRACOTTA: "&d&lPembe"
+    GRAY_TERRACOTTA: "&8&lGri"
+    LIGHT_GRAY_TERRACOTTA: "&7&lAçık Gri"
+    CYAN_TERRACOTTA: "&3&lCamgöbeği"
+    PURPLE_TERRACOTTA: "&5&lMor"
+    BLUE_TERRACOTTA: "&9&lMavi"
+    BROWN_TERRACOTTA: "&6&lKahverengi"
+    GREEN_TERRACOTTA: "&2&lYeşil"
+    RED_TERRACOTTA: "&c&lKırmızı"
+    BLACK_TERRACOTTA: "&0&lSiyah"
+
+  # İlk 3 kişiye verilecek ödül komutları (%player% oyuncunun adını alır)
+  rewards:
+    1:
+      - "eco give %player% 50000"
+      - "give %player% diamond 16"
+      - "broadcast &a[BlockParty] &e%player% &fbirinci oldu ve büyük ödülü kazandı!"
+    2:
+      - "eco give %player% 25000"
+      - "give %player% diamond 8"
+    3:
+      - "eco give %player% 10000"
+      - "give %player% diamond 4"

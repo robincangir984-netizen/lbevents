@@ -13,13 +13,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 
 public class BlockPartyListener implements Listener {
-    private static final Set<UUID> eliminatedPlayers = new HashSet<>();
+    private static final Set<UUID> activePlayers = new HashSet<>();
+    private static final List<UUID> rankingList = new ArrayList<>();
     private static BukkitTask gameTask = null;
     
     private static Material currentSafeColor = Material.WHITE_TERRACOTTA;
@@ -34,6 +36,7 @@ public class BlockPartyListener implements Listener {
         isGameActive = true;
         isEliminationPhase = false;
         originalFloorBlocks.clear();
+        rankingList.clear();
 
         if (LbEvents.getInstance().getLocationManager() == null) {
             Bukkit.broadcast(Component.text("§c[HATA] LocationManager yüklenemedi!"));
@@ -52,15 +55,40 @@ public class BlockPartyListener implements Listener {
         saveArenaFloor(locConfig, path, finalWorld);
 
         if (originalFloorBlocks.isEmpty()) {
-            Bukkit.broadcast(Component.text("§c[HATA] BlockParty zemini bulunamadı! /lbevent wand ile seçip /lbevent setarea blockparty yapmalısın."));
+            Bukkit.broadcast(Component.text("§c[HATA] BlockParty zemini bulunamadı! /lbevents wand ile seçip /lbevents setarea blockparty yapmalısın."));
             isGameActive = false;
             return;
         }
 
-        List<Material> availableColors = new ArrayList<>(new HashSet<>(originalFloorBlocks.values()));
+        // Oyundaki aktif oyuncuları kaydet
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.getWorld().equals(finalWorld)) {
+                activePlayers.add(p.getUniqueId());
+            }
+        }
+
+        if (activePlayers.isEmpty()) {
+            Bukkit.broadcast(Component.text("§c[BlockParty] Arenada hiç oyuncu olmadığı için etkinlik iptal edildi!"));
+            isGameActive = false;
+            return;
+        }
+
+        // Config'den izin verilen blokları çek
+        FileConfiguration config = LbEvents.getInstance().getConfig();
+        List<String> configBlocks = config.getStringList("blockparty.enabled-blocks");
+        List<Material> availableColors = new ArrayList<>();
+
+        for (String blockName : configBlocks) {
+            Material mat = Material.matchMaterial(blockName);
+            if (mat != null && originalFloorBlocks.containsValue(mat)) {
+                availableColors.add(mat);
+            }
+        }
+
         if (availableColors.isEmpty()) {
             availableColors.add(Material.WHITE_TERRACOTTA);
         }
+
         Random random = new Random();
 
         gameTask = new BukkitRunnable() {
@@ -73,29 +101,24 @@ public class BlockPartyListener implements Listener {
                     return;
                 }
 
-                // EventManager null kontrolü güvenli hale getirildi
-                try {
-                    Object eventMgr = LbEvents.getInstance().getClass().getMethod("getEventManager").invoke(LbEvents.getInstance());
-                    if (eventMgr != null) {
-                        Object activeEvent = eventMgr.getClass().getMethod("getActiveEvent").invoke(eventMgr);
-                        if (activeEvent != null && !"blockparty".equalsIgnoreCase(activeEvent.toString())) {
-                            cancel();
-                            return;
-                        }
-                    }
-                } catch (Exception ignored) {}
+                // 1 kişi veya hiç kimse kalmadıysa oyunu bitir
+                if (activePlayers.size() <= 1) {
+                    endGame();
+                    cancel();
+                    return;
+                }
 
                 if (!isEliminationPhase) {
                     if (timer == 4) {
                         restoreArenaFloor();
                         currentSafeColor = availableColors.get(random.nextInt(availableColors.size()));
                         
-                        FileConfiguration mainConfig = LbEvents.getInstance().getConfig();
-                        String baseName = currentSafeColor.name().replace("_TERRACOTTA", "").replace("_WOOL", "").replace("_CONCRETE", "").replace("_CARPET", "");
-                        String translatedColor = ChatColor.translateAlternateColorCodes('&', mainConfig != null ? mainConfig.getString("colors." + currentSafeColor.name(), "&f&l" + baseName) : "&f&l" + baseName);
+                        String baseName = currentSafeColor.name().replace("_TERRACOTTA", "").replace("_WOOL", "").replace("_CONCRETE", "");
+                        String translatedColor = ChatColor.translateAlternateColorCodes('&', config.getString("blockparty.colors." + currentSafeColor.name(), "&f&l" + baseName));
 
-                        for (Player player : Bukkit.getOnlinePlayers()) {
-                            if (player.getWorld().equals(finalWorld) && !eliminatedPlayers.contains(player.getUniqueId())) {
+                        for (UUID uuid : activePlayers) {
+                            Player player = Bukkit.getPlayer(uuid);
+                            if (player != null && player.isOnline()) {
                                 player.sendTitle(translatedColor, ChatColor.GRAY + "Bu renge koş!", 0, 40, 10);
                                 player.sendMessage(Component.text("§e[BlockParty] §fHedef Renk: " + translatedColor));
                             }
@@ -104,8 +127,9 @@ public class BlockPartyListener implements Listener {
                     }
 
                     if (timer > 0) {
-                        for (Player player : Bukkit.getOnlinePlayers()) {
-                            if (player.getWorld().equals(finalWorld)) {
+                        for (UUID uuid : activePlayers) {
+                            Player player = Bukkit.getPlayer(uuid);
+                            if (player != null && player.isOnline()) {
                                 player.sendActionBar(Component.text("§bSıradaki Renk: §e" + timer + " §bsaniye"));
                             }
                         }
@@ -181,6 +205,53 @@ public class BlockPartyListener implements Listener {
         }
     }
 
+    private static void eliminatePlayer(Player player) {
+        if (!activePlayers.contains(player.getUniqueId())) return;
+        
+        activePlayers.remove(player.getUniqueId());
+        rankingList.add(0, player.getUniqueId()); // Son ölenler listeye başa eklenir (1. sonradan belirlenecek)
+
+        player.sendMessage(Component.text("§c[BlockParty] Sürede doğru renge ulaşamadın ve elendin!"));
+        player.teleport(player.getWorld().getSpawnLocation());
+
+        // Eğer oyunda 1 kişi kaldıysa kazananı ilan et
+        if (activePlayers.size() == 1) {
+            UUID winnerUUID = activePlayers.iterator().next();
+            rankingList.add(0, winnerUUID); // Kazanan 1. sırada listeye eklenir
+            endGame();
+        }
+    }
+
+    private static void endGame() {
+        isGameActive = false;
+        if (gameTask != null) {
+            gameTask.cancel();
+            gameTask = null;
+        }
+        restoreArenaFloor();
+
+        FileConfiguration config = LbEvents.getInstance().getConfig();
+
+        // İlk 3 kişiye ödül dağıtımı
+        for (int i = 0; i < Math.min(rankingList.size(), 3); i++) {
+            UUID uuid = rankingList.get(i);
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                int rank = i + 1;
+                Bukkit.broadcast(Component.text("§a[BlockParty] §e" + player.getName() + " §foyunu §b#" + rank + " §folarak bitirdi!"));
+                
+                List<String> commands = config.getStringList("blockparty.rewards." + rank);
+                for (String cmd : commands) {
+                    String parsedCmd = cmd.replace("%player%", player.getName());
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsedCmd);
+                }
+            }
+        }
+
+        activePlayers.clear();
+        rankingList.clear();
+    }
+
     public static void stopBlockParty() {
         isGameActive = false;
         if (gameTask != null) {
@@ -188,11 +259,13 @@ public class BlockPartyListener implements Listener {
             gameTask = null;
         }
         restoreArenaFloor();
-        eliminatedPlayers.clear();
+        activePlayers.clear();
+        rankingList.clear();
     }
 
     public static void reset() {
-        eliminatedPlayers.clear();
+        activePlayers.clear();
+        rankingList.clear();
     }
 
     @EventHandler
@@ -206,13 +279,26 @@ public class BlockPartyListener implements Listener {
         String worldName = locConfig.getString("events.blockparty.world", "world");
         
         if (!player.getWorld().getName().equals(worldName)) return;
-        if (eliminatedPlayers.contains(player.getUniqueId())) return;
+        if (!activePlayers.contains(player.getUniqueId())) return;
 
         if (isEliminationPhase) {
             if (player.getLocation().getY() < floorMinY) {
-                eliminatedPlayers.add(player.getUniqueId());
-                player.sendMessage(Component.text("§c[BlockParty] Sürede doğru renge ulaşamadın ve elendin!"));
-                player.teleport(player.getWorld().getSpawnLocation());
+                eliminatePlayer(player);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        if (!isGameActive) return;
+        Player player = event.getPlayer();
+        if (activePlayers.contains(player.getUniqueId())) {
+            activePlayers.remove(player.getUniqueId());
+            rankingList.add(0, player.getUniqueId());
+            if (activePlayers.size() == 1) {
+                UUID winnerUUID = activePlayers.iterator().next();
+                rankingList.add(0, winnerUUID);
+                endGame();
             }
         }
     }
